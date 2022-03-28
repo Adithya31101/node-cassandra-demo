@@ -3,6 +3,7 @@ const PersonModel = require("./models/PersonModel");
 const cassandra = require("./cassandra")();
 const express = require("express");
 const _ = require("lodash");
+const { uuidFromString } = require('express-cassandra');
 
 const app = express();
 cassandra.createModel(PersonModel);
@@ -16,33 +17,30 @@ const personDocuments = (
 	fieldsArray = "all",
 	skipFields = "none"
 ) => {
-	return new Promise((resolve, reject) => {
-		let queryObject = filterData != "all" ? filterData : {};
-		let projection = fieldsArray != "all" ? fieldsArray : [];
-		let omitFields = skipFields != "none" ? skipFields : [];
-
-		cassandra.models.person.find(
-			queryObject,
-			{
-				select: projection,
-				raw: true,
-			},
-			(err, templates) => {
-				if (err) {
-					return reject(err);
-				}
-				const data = templates.map((template) => _.omit(template, omitFields));
-				return resolve(data);
+	const filterQuery = filterData === 'all'? {} : filterData;
+	const projection = fieldsArray === 'all'? [] : fieldsArray;
+	const omitFields = skipFields === 'none'? [] : skipFields;
+	return new Promise(async (resolve, reject) => {
+		try {
+			if(filterData["id"]) {
+				filterData["id"] = uuidFromString(filterData['id']);
 			}
-		);
-	});
+			const personData = await cassandra.models.person.findAsync(filterQuery, {select: projection, raw: true});
+			const dataWithOmittedFields = personData.map((template) =>
+				_.omit(template, omitFields)
+			);
+			resolve(dataWithOmittedFields);
+		} catch(err) {
+			console.log(err);
+			reject(err);
+		}
+	})
 };
 
 // -----------------------------------------------------------------------------
 
 app.post("/findPerson", async (req, res) => {
 	const { find, fields, skip } = req.body;
-	console.log(req.body);
 	try {
 		const data = await personDocuments(find, fields, skip);
 		if (data.length > 0) {
@@ -55,15 +53,15 @@ app.post("/findPerson", async (req, res) => {
 	}
 });
 
-app.get("/persons", (req, res) => {
+app.get("/persons", async (req, res) => {
 	console.log(cassandra.models);
-	cassandra.models.person.find({}, { raw: true }, (err, value) => {
-		if (err) {
-			console.log(err);
+	try {
+		const persons = await cassandra.models.person.findAsync({}, { raw: true })
+		res.status(200).json(persons);
+	} catch (err) {
+		console.log(err);
 			res.status(500).json(err);
-		}
-		res.status(200).json(value);
-	});
+	}
 });
 
 app.post("/createPerson", (req, res) => {
@@ -78,6 +76,39 @@ app.post("/createPerson", (req, res) => {
 		}
 		res.status(201).json({ message: "Person created!" });
 	});
+});
+
+app.put("/updatePerson/:_id",async (req, res) => {
+	const personId = uuidFromString(req.params._id);
+	try {
+		const person = await cassandra.models.person.findOneAsync(
+			{ id: personId },
+		);
+		for (let field in req.body){
+			person[field] = req.body[field];
+		}
+		console.log(req.body);
+		await person.saveAsync();
+		console.log("Updation successful");
+		res.status(200).json({message: "Person updated successfully!"});
+	} catch (err) {
+		console.log(err);
+		res.status(500).json({message: "Person updation failed"});
+	}
+});
+
+app.put("/deletePerson/:_id",async (req, res) => {
+	const personId = uuidFromString(req.params._id);
+	try {
+		const person = await cassandra.models.person.delete(
+			{ id: personId },
+		);
+		console.log(person);
+		res.status(204).json({message: "Person deleted successfully!"});
+	} catch (err) {
+		console.log(err);
+		res.status(500).json({message: "Person deletion failed!"});
+	}
 });
 
 app.listen(8000, () => {

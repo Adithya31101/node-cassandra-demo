@@ -1,6 +1,10 @@
 module.exports = {
 	schema: {
 		fields: {
+			id: {
+				type: "uuid",
+				default: {"$db_function": "uuid()"},
+			},
 			name: {
 				type: "varchar",
 				rule: {
@@ -30,7 +34,7 @@ module.exports = {
 				typeDef: "<frozen<qualification>>",
 			},
 		},
-		key: ["name"],
+		key: ['id'],
 	},
 	name: "person",
 };
