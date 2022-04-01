@@ -66,6 +66,9 @@ app.get("/persons", async (req, res) => {
 
 app.post("/createPerson", (req, res) => {
 	console.log("creating ", req.body.name, "...");
+	if(req.body['id']){
+		req.body['id'] = uuidFromString(req.body['id']);
+	}
 	req.body.created = new Date();
 	const person = new cassandra.models.person(req.body);
 	console.log(person);
@@ -90,6 +93,21 @@ app.put("/updatePerson/:_id",async (req, res) => {
 		console.log(req.body);
 		await person.saveAsync();
 		console.log("Updation successful");
+		res.status(200).json({message: "Person updated successfully!", data: person});
+	} catch (err) {
+		console.log(err);
+		res.status(500).json({message: "Person updation failed"});
+	}
+});
+
+app.put("/updateOne/:_id", async (req, res) => {
+	const personId = uuidFromString(req.params._id);
+	try {
+		const res = await cassandra.models.person.updateAsync(
+			{ id: personId },
+			req.body
+		);
+		console.log("Updation successful", res);
 		res.status(200).json({message: "Person updated successfully!"});
 	} catch (err) {
 		console.log(err);
@@ -97,14 +115,51 @@ app.put("/updatePerson/:_id",async (req, res) => {
 	}
 });
 
-app.put("/deletePerson/:_id",async (req, res) => {
+
+app.put("/updateGeneral/", async (req, res) => {
+	const {findObj, updateObj} = req.body;
+	if(findObj['id']){
+		findObj['id'] = uuidFromString(findObj['id']);
+	}
+	try {
+		const person = await cassandra.models.person.updateAsync(
+			findObj,
+			updateObj
+		);
+		console.log("Updation successful", person);
+		res.status(200).json({message: "Person updated successfully!"});
+	} catch (err) {
+		console.log(err);
+		res.status(500).json({message: "Person updation failed"});
+	}
+});
+
+app.put("/addQualification/", async (req, res) => {
+	const {findObj, qualification} = req.body;
+	if(findObj['id']){
+		findObj['id'] = uuidFromString(findObj['id'])
+	}
+	try {
+		const person = await cassandra.models.person.updateAsync(
+			findObj,
+			{ qualification: { $prepend: [qualification] } }
+		);
+		console.log("Updation successful", person);
+		res.status(200).json({message: "Person updated successfully!"});
+	} catch (err) {
+		console.log(err);
+		res.status(500).json({message: "Person updation failed"});
+	}
+});
+
+app.delete("/deletePerson/:_id",async (req, res) => {
 	const personId = uuidFromString(req.params._id);
 	try {
 		const person = await cassandra.models.person.delete(
 			{ id: personId },
 		);
 		console.log(person);
-		res.status(204).json({message: "Person deleted successfully!"});
+		res.status(200).json({message: "Person deleted successfully!"});
 	} catch (err) {
 		console.log(err);
 		res.status(500).json({message: "Person deletion failed!"});
